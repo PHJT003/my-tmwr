@@ -22,7 +22,7 @@ theme_set(theme_bw())
 
 Predict the sale price of a house based on its other characteristics.
 
-```{r echo=FALSE}
+```{r echo=FALSE, include=FALSE}
 
 data(ames, package = "modeldata")
 
@@ -44,7 +44,7 @@ ames %>%
 
 
 ```
-```{r}
+```{r include=FALSE}
 
 # apply log-transform to sale_price
 ames <- ames %>% mutate(sale_price = log10(sale_price))
@@ -54,9 +54,36 @@ ames <- ames %>% mutate(sale_price = log10(sale_price))
 
 # Spending our data
 
+The *data spending* stage is where we decide the proportion of our **train/test split**.
+
+## Common methods for splitting data
+
 ```{r}
 
+set.seed(123)
 
+# calculate quantiles
+qtls <- quantile(ames$sale_price, 
+                 probs = c(0.25, 0.50, 0.75))
+
+# visualise quantiles for stratified sampling
+ames %>% 
+  ggplot(aes(x = sale_price)) +
+  geom_density() +
+  geom_vline(xintercept = qtls, linetype = "dashed" ) +
+  labs(x = "Sale price (log-10 USD)")
+
+
+
+# split data into 80% train and 20% test
+ames_split <- initial_split(ames, prop = 0.80,
+                            # sample according to quartiles
+                            strata = sale_price)
+
+# get the train data
+ames_train <- training(ames_split)
+
+# get the test data
+ames_test <- testing(ames_split)
 
 ```
-

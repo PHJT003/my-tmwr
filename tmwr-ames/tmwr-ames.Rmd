@@ -1,0 +1,60 @@
+---
+title: "The Ames housing data"
+author: "Valerio Villani"
+date: "30/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE, warning=FALSE, error=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(tidymodels)
+
+theme_set(theme_bw())
+
+```
+
+## Goal
+
+Predict the sale price of a house based on its other characteristics.
+
+```{r echo=FALSE}
+
+data(ames, package = "modeldata")
+
+ames <- janitor::clean_names(ames)
+
+glimpse(ames)
+
+```
+
+## EDA
+
+```{r echo=FALSE}
+
+ames %>% 
+  ggplot(aes(x = sale_price)) +
+  geom_histogram(bins = 50) +
+  # visualise log-transformed data
+  scale_x_log10()
+
+
+```
+```{r}
+
+# apply log-transform to sale_price
+ames <- ames %>% mutate(sale_price = log10(sale_price))
+
+```
+
+
+## Model fitting
+
+```{r}
+
+
+
+```
+

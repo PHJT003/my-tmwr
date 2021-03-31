@@ -87,3 +87,33 @@ ames_train <- training(ames_split)
 ames_test <- testing(ames_split)
 
 ```
+
+# Feature engineering
+
+Feature engineering encompasses activities that reformat predictor values to make them easier for a model to use effectively (e.g., transformations).
+
+
+```{r}
+
+lm(sale_price ~ neighborhood + log10(gr_liv_area) + year_built + bldg_type,
+   data = ames)
+
+```
+Remember that when invoking the `recipe()` function, the steps are not estimated or executed in any way. The second phase for using a recipe is to estimate any quantities required by the steps using the `prep()` function.
+
+```{r}
+
+# create a lm() recipe
+simple_ames <- 
+  recipe(sale_price ~ neighborhood + gr_liv_area + year_built + bldg_type,
+         data = ames_train) %>% 
+  # log-transform "general living area" variable
+  step_log(gr_liv_area, base = 10) %>% 
+  # dummy-code all factors
+  step_dummy(all_nominal())
+
+simple_ames
+  
+
+```
+

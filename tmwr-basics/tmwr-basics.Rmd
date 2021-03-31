@@ -26,7 +26,7 @@ Predict the sale price of a house based on its other characteristics.
 
 data(ames, package = "modeldata")
 
-ames <- janitor::clean_names(ames)
+# ames <- janitor::clean_names(ames)
 
 glimpse(ames)
 
@@ -37,7 +37,7 @@ glimpse(ames)
 ```{r echo=FALSE}
 
 ames %>% 
-  ggplot(aes(x = sale_price)) +
+  ggplot(aes(x = Sale_Price)) +
   geom_histogram(bins = 50) +
   # visualise log-transformed data
   scale_x_log10()
@@ -46,8 +46,8 @@ ames %>%
 ```
 ```{r include=FALSE}
 
-# apply log-transform to sale_price
-ames <- ames %>% mutate(sale_price = log10(sale_price))
+# apply log-transform to Sale_Price
+ames <- ames %>% mutate(Sale_Price = log10(Sale_Price))
 
 ```
 
@@ -63,12 +63,12 @@ The *data spending* stage is where we decide the proportion of our **train/test 
 set.seed(123)
 
 # calculate quantiles
-qtls <- quantile(ames$sale_price, 
+qtls <- quantile(ames$Sale_Price, 
                  probs = c(0.25, 0.50, 0.75))
 
 # visualise quantiles for stratified sampling
 ames %>% 
-  ggplot(aes(x = sale_price)) +
+  ggplot(aes(x = Sale_Price)) +
   geom_density() +
   geom_vline(xintercept = qtls, linetype = "dashed" ) +
   labs(x = "Sale price (log-10 USD)")
@@ -78,7 +78,7 @@ ames %>%
 # split data into 80% train and 20% test
 ames_split <- initial_split(ames, prop = 0.80,
                             # sample according to quartiles
-                            strata = sale_price)
+                            strata = Sale_Price)
 
 # get the train data
 ames_train <- training(ames_split)
@@ -90,30 +90,136 @@ ames_test <- testing(ames_split)
 
 # Feature engineering
 
-Feature engineering encompasses activities that reformat predictor values to make them easier for a model to use effectively (e.g., transformations).
+Feature engineering encompasses activities that reformat predictor values to make them easier for a model to use effectively. One of the most common feature engineering tasks is transforming nominal or qualitative data (factors or characters) so that they can be encoded or represented numerically.
 
 
 ```{r}
 
-lm(sale_price ~ neighborhood + log10(gr_liv_area) + year_built + bldg_type,
+lm(Sale_Price ~ Neighborhood + log10(Gr_Liv_Area) + Year_Built + Bldg_Type,
    data = ames)
 
 ```
 Remember that when invoking the `recipe()` function, the steps are not estimated or executed in any way. The second phase for using a recipe is to estimate any quantities required by the steps using the `prep()` function.
 
-```{r}
+```{r recipe}
 
 # create a lm() recipe
-simple_ames <- 
-  recipe(sale_price ~ neighborhood + gr_liv_area + year_built + bldg_type,
+ames_rec <- 
+  recipe(Sale_Price ~ Neighborhood + Gr_Liv_Area + Year_Built + Bldg_Type,
          data = ames_train) %>% 
   # log-transform "general living area" variable
-  step_log(gr_liv_area, base = 10) %>% 
+  step_log(Gr_Liv_Area, base = 10) %>% 
   # dummy-code all factors
   step_dummy(all_nominal())
 
+ames_rec
+
+
+```
+
+```{r prep}
+
+simple_ames <- prep(ames_rec, training = ames_train)
+
 simple_ames
-  
+
+```
+```{r bake}
+
+ames_test_bake <- bake(simple_ames, new_data = ames_test)
+
+names(ames_test_bake) %>% 
+  head()
+
+```
+
+```{r}
+
+# we have got too many neighbourhoods
+ggplot(ames_train, aes(y = Neighborhood)) + 
+  geom_bar() + 
+  labs(y = NULL)
+
+```
+```{r recipe2}
+
+ames_rec <- 
+  recipe(Sale_Price ~ Neighborhood + Gr_Liv_Area + Year_Built + Bldg_Type,
+         data = ames_train) %>%
+  step_log(Gr_Liv_Area, base = 10) %>% 
+  # lump the bottm 1% of neighbourhoods into the "other" category
+  step_other(Neighborhood, threshold = 0.01) %>% 
+  step_dummy(all_nominal())
+
+ames_rec
+
+```
+
+After exploring the Ames training set, we might find that the regression slopes for the general living area differ for different building types.
+
+```{r interaction-terms}
+
+ggplot(ames_train, aes(x = Gr_Liv_Area, y = 10^Sale_Price)) + 
+  geom_point(alpha = .2) + 
+  facet_wrap(~Bldg_Type) + 
+  geom_smooth(method = lm, formula = y ~ x, se = FALSE, col = "red") + 
+  scale_x_log10() + 
+  scale_y_log10() + 
+  labs(x = "General Living Area", y = "Sale Price (USD)")
+
+```
+
+
+```{r recipe-interaction}
+
+ames_rec <- recipe(Sale_Price ~ Neighborhood + Gr_Liv_Area + Year_Built + Bldg_Type,
+                   data = ames_train) %>%
+  step_log(Gr_Liv_Area, base = 10) %>% 
+  step_other(Neighborhood, threshold = 0.01) %>% 
+  step_dummy(all_nominal()) %>% 
+  # Gr_Liv_Area is on the log scale from a previous step
+  step_interact( ~ Gr_Liv_Area:starts_with("Bldg_type_") )
+
+ames_rec
+
+```
+
+## Spline functions
+
+```{r}
+
+library(patchwork)
+library(splines)
+
+plot_smoother <- function(deg_free) {
+  ggplot(ames_train, aes(x = Latitude, y = Sale_Price)) + 
+    geom_point(alpha = .2) + 
+    scale_y_log10() +
+    geom_smooth(
+      method = lm,
+      formula = y ~ ns(x, df = deg_free),
+      col = "red",
+      se = FALSE
+    ) +
+    ggtitle(paste(deg_free, "Spline Terms"))
+}
+
+( plot_smoother(2) + plot_smoother(5) ) / ( plot_smoother(20) + plot_smoother(100) )
+
+```
+The `ns()` function in the splines package generates feature columns using functions called natural splines.
+
+
+```{r recipe-nonlinear}
+
+recipe(Sale_Price ~ Neighborhood + Gr_Liv_Area + Year_Built + Bldg_Type + Latitude,
+         data = ames_train) %>%
+  step_log(Gr_Liv_Area, base = 10) %>% 
+  step_other(Neighborhood, threshold = 0.01) %>% 
+  step_dummy(all_nominal()) %>% 
+  step_interact( ~ Gr_Liv_Area:starts_with("Bldg_Type_") ) %>% 
+  # apply natural splines to Latitude
+  step_ns(Latitude, deg_free = 20)
 
 ```
 
